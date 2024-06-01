@@ -5,7 +5,7 @@
 
 // SDL based Emulation Build
 // 
-// gcc -o fbworks_SDL -D BACKEND_SDL -D SCALED_OUTPUT fbworks.c -I /usr/include/SDL2 -l SDL2
+// gcc -o fbworks_SDL -D BACKEND_SDL -D SCALED_OUTPUT fbworks.c -I /usr/include/SDL2 -l SDL2 -l m
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
