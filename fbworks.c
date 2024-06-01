@@ -73,6 +73,9 @@ struct rgba {
 	uint8_t a;
 } __attribute__((packed));
 
+#define STB_TRUETYPE_IMPLEMENTATION 
+#include "stb_truetype.h" /* http://nothings.org/stb/stb_truetype.h */
+
 //
 
 #define FB_WIDTH  720
@@ -847,6 +850,63 @@ void restoreTerminal()
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+int main(int argc, char *argv[])
+{
+	stBufferAttr tBA;
+
+	if(2 > argc) 
+	{
+		printf("Mouse/Touch input device not specified !\n");
+		fdMouseTouch = -1;	
+	} 
+	else if(2 == argc)
+	{
+		printf("Mouse/Touch input device : %s\n", argv[1]);
+		fdMouseTouch = open(argv[1], O_RDONLY | O_NOCTTY | O_NONBLOCK);
+		printf("Mouse/Touch fd : %d\n", fdMouseTouch);
+	}
+	else 
+	{
+
+	}
+
+	// Init Terminal Settings
+	initTerminal();
+
+	// Init Graphics
+	initGraphics(&tBA);
+
+	// Blank the buffer contents before draw operations
+	blankFrontBuffer();
+
+	// Init Events
+	initEvents();
+
+	// Launch Thread
+	launchGraphicsThread(&tBA);
+
+	// Event Loop
+	eventLoop();
+
+	// Wait for end of Graphics thread
+	waitForGraphicsThread();
+
+	// DeInit Events
+	deInitEvents();
+
+	// DeInit Graphics
+	deInitGraphics();	
+
+	// Restore Terminal Settings
+	restoreTerminal();
+
+	printf("Program done !!!\r\n");
+
+	return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 int graphicsMain( void* ptrData )
 {
 	stBufferAttr* ptrBufferAttr;
@@ -859,8 +919,10 @@ int graphicsMain( void* ptrData )
 
 	//
 
-	unsigned char *data;
+	unsigned char *pDstData;
 	unsigned char *pDstLine;
+	unsigned char *pSrcData;
+	unsigned char *pSrcLine;
 
 	unsigned char r, g ,b;
 	unsigned int w, h, i, j, x, y, start, end; 
@@ -914,7 +976,7 @@ int graphicsMain( void* ptrData )
 		unsigned char *im_data;
 
 		unsigned char *resized_data;
-		unsigned char *pSrcLine;
+		
 		int new_x;
 		int new_y;		
 		uint32_t red_len;
@@ -981,11 +1043,11 @@ int graphicsMain( void* ptrData )
 			}
 			*/
 
-			printf("x = %d\n", x);
-			printf("y = %d\n", y);
-			printf("n = %d\n", n);
+			//printf("x = %d\n", x);
+			//printf("y = %d\n", y);
+			//printf("n = %d\n", n);
 			line_len = (size_t) (x * nReqChannels);
-			printf("line_len = %d\n", line_len);
+			//printf("line_len = %d\n", line_len);
 			pDstLine = pBackBuffer;
 			pSrcLine = resized_data;
 
@@ -994,7 +1056,7 @@ int graphicsMain( void* ptrData )
 				(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
 
 				pDstLine += nPitch;
-				pSrcLine += 720*nReqChannels;
+				pSrcLine += line_len;
 			}
 
 			stbi_image_free((void *) im_data);
@@ -1003,6 +1065,138 @@ int graphicsMain( void* ptrData )
 			if (im_data != resized_data)
 				free(resized_data);
 		}
+	}
+
+	{
+		long size;
+		unsigned char* fontBuffer;	
+
+		const char* fnFont = "font/Cascadia.ttf";
+		//const char* fnFont = "font/Monda-Regular.ttf";		
+		//const char* fnFont = "font/VictorMono-Regular.ttf";	
+
+		FILE* fontFile = fopen(fnFont, "rb");	
+
+		fseek(fontFile, 0, SEEK_END);
+		size = ftell(fontFile); /* how long is the file ? */
+		fseek(fontFile, 0, SEEK_SET); /* reset */
+
+		fontBuffer = malloc(size);
+
+		fread(fontBuffer, size, 1, fontFile);
+		fclose(fontFile);		
+
+		stbtt_fontinfo info;
+		if (!stbtt_InitFont(&info, fontBuffer, 0))
+		{
+			printf("failed\n");
+		}
+
+		int b_w = 720; /* bitmap width */
+		int b_h = 128; /* bitmap height */
+		int l_h = 48; //24; /* line height */
+
+		/* create a bitmap for the phrase */
+		unsigned char* bitmap = calloc(b_w * b_h, sizeof(unsigned char));
+
+		/* calculate font scaling */
+		float scale = stbtt_ScaleForPixelHeight(&info, l_h);
+
+		//char* word = "Now that is what I call ... Cheese !!!";
+		char* word = "Hello ... My friend !!!";
+
+		int x = 0;
+			
+		int ascent, descent, lineGap;
+		stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
+
+		ascent = roundf(ascent * scale);
+		descent = roundf(descent * scale);
+
+		int i;
+		for (i = 0; i < strlen(word); ++i)
+		{
+			/* how wide is this character */
+			int ax;
+		int lsb;
+			stbtt_GetCodepointHMetrics(&info, word[i], &ax, &lsb);
+			/* (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) */
+
+			/* get bounding box for character (may be offset to account for chars that dip above or below the line) */
+			int c_x1, c_y1, c_x2, c_y2;
+			stbtt_GetCodepointBitmapBox(&info, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
+			
+			/* compute y (different characters have different heights) */
+			int y = ascent + c_y1;
+			
+			/* render character (stride and offset is important here) */
+			int byteOffset = x + roundf(lsb * scale) + (y * b_w);
+			stbtt_MakeCodepointBitmap(&info, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, word[i]);
+
+			/* advance x */
+			x += roundf(ax * scale);
+			
+			/* add kerning */
+			int kern;
+			kern = stbtt_GetCodepointKernAdvance(&info, word[i], word[i + 1]);
+			x += roundf(kern * scale);
+		}
+
+		/*
+			Note that this example writes each character directly into the target image buffer.
+			The "right thing" to do for fonts that have overlapping characters is
+			MakeCodepointBitmap to a temporary buffer and then alpha blend that onto the target image.
+			See the stb_truetype.h header for more info.
+		*/
+
+		//
+
+		unsigned char fr = 32;
+		unsigned char fg = 160;
+		unsigned char fb = 224;
+		unsigned char fc = 0;
+
+		int nReqChannels = 1;
+		int line_len = (size_t) (x * nReqChannels);
+		//printf("line_len = %d\n", line_len);
+		pDstLine = pBackBuffer;
+		pSrcLine = bitmap;
+		pSrcData = pSrcLine;
+
+		for (int m =0; m < b_h; m++) 
+		{
+			//(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
+
+			pDstData = pDstLine;
+			
+
+			for (int n =0; n < b_w; n++) 
+			{
+				fc = *pSrcData;
+
+				*pDstData = (unsigned char) ((fr * fc)>>8);
+				pDstData++;
+
+				*pDstData = (unsigned char) ((fg * fc)>>8);
+				pDstData++;
+
+				*pDstData = (unsigned char) ((fb * fc)>>8);
+				pDstData++;
+
+				*pDstData = 255;//a;
+				pDstData++;
+
+				pSrcData++;
+			}
+
+			pDstLine += nPitch;
+			//pSrcLine += line_len;
+		}		
+
+		//
+
+		free(fontBuffer);
+    	free(bitmap);		
 	}
 
 	//
@@ -1074,63 +1268,6 @@ int graphicsMain( void* ptrData )
 	printf("graphicsMain Done !!!\r\n");	
 
 	//
-
-	return 0;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-
-int main(int argc, char *argv[])
-{
-	stBufferAttr tBA;
-
-	if(2 > argc) 
-	{
-		printf("Mouse/Touch input device not specified !\n");
-		fdMouseTouch = -1;	
-	} 
-	else if(2 == argc)
-	{
-		printf("Mouse/Touch input device : %s\n", argv[1]);
-		fdMouseTouch = open(argv[1], O_RDONLY | O_NOCTTY | O_NONBLOCK);
-		printf("Mouse/Touch fd : %d\n", fdMouseTouch);
-	}
-	else 
-	{
-
-	}
-
-	// Init Terminal Settings
-	initTerminal();
-
-	// Init Graphics
-	initGraphics(&tBA);
-
-	// Blank the buffer contents before draw operations
-	blankFrontBuffer();
-
-	// Init Events
-	initEvents();
-
-	// Launch Thread
-	launchGraphicsThread(&tBA);
-
-	// Event Loop
-	eventLoop();
-
-	// Wait for end of Graphics thread
-	waitForGraphicsThread();
-
-	// DeInit Events
-	deInitEvents();
-
-	// DeInit Graphics
-	deInitGraphics();	
-
-	// Restore Terminal Settings
-	restoreTerminal();
-
-	printf("Program done !!!\r\n");
 
 	return 0;
 }
