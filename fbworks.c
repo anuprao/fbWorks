@@ -62,6 +62,8 @@
 #define MAX_EVENTS 5
 #define READ_SIZE 10
 
+#define FB_KEY_ESC	0x1B
+
 //
 
 struct termios prev_tty_cfg;
@@ -114,7 +116,6 @@ int graphicsMain( void* ptrData );
 	#define WINDOW_WIDTH  FB_WIDTH
 	#define WINDOW_HEIGHT FB_HEIGHT
 #endif
-
 
 //
 
@@ -469,6 +470,7 @@ void unlockSurface(void)
 	pthread_mutex_unlock(&lockBackBuffer); 
 }
 
+
 void* fxn_graphicsMain(void* ptrData)
 {
 	graphicsMain(ptrData);
@@ -484,6 +486,27 @@ void launchGraphicsThread(stBufferAttr* ptrBufferAttr)
 	}
 
 	pthread_create(&thGraphics, NULL, fxn_graphicsMain, ptrBufferAttr);
+}
+
+void msgGraphicsThreadToQuit(void)
+{
+	pthread_cancel(thGraphics);
+}
+
+void waitForGraphicsThread(void)
+{
+	pthread_join(thGraphics, NULL);
+}
+
+void checkIfQuit(void)
+{
+	pthread_testcancel();
+}
+
+static void cleanupGraphicsThread(void *arg)
+{
+	printf("Cleanup !!!\n");
+	//
 }
 
 //
@@ -505,7 +528,7 @@ static char * itimerspec_dump(struct itimerspec *ts)
 }
 */
 
-void addScreenRefreshTimer()
+void addScreenRefreshTimer(void)
 {
 	struct epoll_event epollEvent_ScrRefresh;
 
@@ -557,7 +580,7 @@ void addScreenRefreshTimer()
 	printf("added timerfd to epoll set\n");
 }
 
-void addKeyBoardEvents()
+void addKeyBoardEvents(void)
 {
 	// Add input event for standard input 
 
@@ -573,7 +596,7 @@ void addKeyBoardEvents()
 	}	
 }
 
-void addMouseEvents()
+void addMouseEvents(void)
 {
 	// Add input event for mouse
 
@@ -592,7 +615,7 @@ void addMouseEvents()
 	}
 }
 
-void initEvents()
+void initEvents(void)
 {
 	if (pthread_mutex_init(&lockBackBuffer, NULL) != 0) 
 	{ 
@@ -656,9 +679,11 @@ void eventLoop()
 							printf("inputKeys[%d] = 0x%02X !!!\n", i, inputKeys[i]);
 
 							// Quit if 'q' or 'Q' is pressed
-							if (inputKeys[i] == 'q' || inputKeys[i] == 'Q')
+							// if (inputKeys[i] == 'q' || inputKeys[i] == 'Q')
+							if (FB_KEY_ESC == inputKeys[i])
 							{
 								printf("Quit !!!\n");
+								msgGraphicsThreadToQuit();
 								quit = 1;
 							}
 						}
@@ -765,14 +790,6 @@ void eventLoop()
 					unlockSurface();
 					//                    
 				}
-
-				// TODO: Mouse Events
-				//{
-				//	if(LEFT BUTTON == )
-				//	{
-				//		printf( "MOUSE BUTTON UP ... %d : %d, %d\n", button, x, y);
-				//	}
-				//}
 			}
 		}
 
@@ -785,11 +802,6 @@ void eventLoop()
 		//Update screen
 		updateFrontBuffer();
 	}	
-}
-
-void waitForGraphicsThread()
-{
-	pthread_join(thGraphics, NULL);
 }
 
 void deInitEvents()
@@ -869,6 +881,8 @@ int graphicsMain( void* ptrData )
 
 	//
 
+	//
+
 	// Blank the buffer contents before draw operations
 	blankBuffer(buffer, height*nPitch);
 
@@ -882,6 +896,8 @@ int graphicsMain( void* ptrData )
 
 	do
 	{
+		checkIfQuit();
+
 		r = rand() % 256;
 		g = rand() % 256;
 		b = rand() % 256;
@@ -993,3 +1009,4 @@ int main(int argc, char *argv[])
 
 	return 0;
 }
+
