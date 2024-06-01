@@ -50,9 +50,28 @@
 
 #include <termios.h>
 
+#include <pthread.h>
+
 //
 
-#include <pthread.h>
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_NO_PSD
+#define STBI_NO_TGA
+#define STBI_NO_HDR
+#define STBI_NO_PIC
+#define STBI_NO_LINEAR
+#include "stb_image.h"
+
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STBIR_SATURATE_INT
+#include "stb_image_resize2.h"
+
+struct rgba {
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t a;
+} __attribute__((packed));
 
 //
 
@@ -141,7 +160,7 @@ void blankFrontBuffer()
 
 void blitBackBufferToFrontBuffer()
 {
-	SDL_BlitSurface(backSurface, NULL, frontSurface, NULL);
+	SDL_BlitScaled(backSurface, NULL, frontSurface, NULL);
 }
 
 void updateFrontBuffer()
@@ -835,13 +854,13 @@ int graphicsMain( void* ptrData )
 	//
 	
 	int bytes_per_pixel, nPitch;	
-	unsigned char *buffer;
-	int width, height;
+	unsigned char *pBackBuffer;
+	int nWidth, nHeight;
 
 	//
 
 	unsigned char *data;
-	unsigned char *pline;
+	unsigned char *pDstLine;
 
 	unsigned char r, g ,b;
 	unsigned int w, h, i, j, x, y, start, end; 
@@ -874,22 +893,124 @@ int graphicsMain( void* ptrData )
 	//
 
 	bytes_per_pixel = ptrBufferAttr->BytesPerPixel;
-	buffer = ptrBufferAttr->pixels;
+	pBackBuffer = ptrBufferAttr->pixels;
 	nPitch = ptrBufferAttr->pitch;
-	width = ptrBufferAttr->width;
-	height = ptrBufferAttr->height;
+	nWidth = ptrBufferAttr->width;
+	nHeight = ptrBufferAttr->height;
 
 	//
 
 	//
 
 	// Blank the buffer contents before draw operations
-	blankBuffer(buffer, height*nPitch);
+	blankBuffer(pBackBuffer, nHeight*nPitch);
 
 	//
 
-	w = width >> 2;
-	h = height >> 2;
+	{
+		int x,y,n;
+
+		const char* fnImage = "img/myanimal.png";
+		unsigned char *im_data;
+
+		unsigned char *resized_data;
+		unsigned char *pSrcLine;
+		int new_x;
+		int new_y;		
+		uint32_t red_len;
+		uint32_t blue_len;
+		uint32_t green_len;
+		uint32_t transp_len;
+		uint32_t *pixel;
+		size_t line_len;
+		struct rgba *rgba;	
+		int len;	
+		int nReqChannels;
+
+		nReqChannels = 4;
+		im_data = stbi_load(fnImage, &x, &y, &n, nReqChannels);
+		len = nReqChannels * y;
+
+		if (NULL != im_data)
+		{
+			if ((nWidth >= x) && (nHeight >= y))
+			{
+				printf("Avoiding resize !\n");
+				resized_data = im_data;
+			}
+			else 
+			{
+				printf("Resizing !\n");
+				resized_data = malloc(len);
+
+				// shrink the image and keep the ratio 
+				if (x > y) 
+				{
+					new_x = (int) nWidth;
+					new_y = (int) roundf((float) (y * nWidth / x));
+				}
+				else 
+				{
+					new_y = (int) nHeight;
+					new_x = (int) roundf((float) (x * nHeight / y));
+				}
+
+				if (1 != stbir_resize_uint8_linear(im_data, x, y, 0, resized_data, new_x, new_y, 0, n))
+					goto free_resized;
+
+				x = new_x;
+				y = new_y;
+			}
+
+			// convert the pixels from RGBA to the framebuffer format 
+			/*
+			red_len = 0; //8 - var.red.length;
+			green_len = 0; //8 - var.green.length;
+			blue_len = 0; //8 - var.blue.length;
+			transp_len = 0; //8 - var.transp.length;
+
+			for (pixel = (uint32_t *) resized_data;  (uint32_t *) (resized_data + (x * y * n)) > pixel;  ++pixel) 
+			{
+				rgba = (struct rgba *) pixel;
+
+				*pixel = 
+					((rgba->r >> red_len) << var.red.offset) | 
+					((rgba->g >> green_len) << var.green.offset) |
+					((rgba->b >> blue_len) << var.blue.offset) |
+					((rgba->a >> transp_len) << var.transp.offset);				
+			}
+			*/
+
+			printf("x = %d\n", x);
+			printf("y = %d\n", y);
+			printf("n = %d\n", n);
+			line_len = (size_t) (x * nReqChannels);
+			printf("line_len = %d\n", line_len);
+			pDstLine = pBackBuffer;
+			pSrcLine = resized_data;
+
+			for (int m =0; m < y; m++) 
+			{
+				(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
+
+				pDstLine += nPitch;
+				pSrcLine += 720*nReqChannels;
+			}
+
+			stbi_image_free((void *) im_data);
+
+		free_resized:
+			if (im_data != resized_data)
+				free(resized_data);
+		}
+	}
+
+	//
+
+	/*
+	
+	w = nWidth >> 2;
+	h = nHeight >> 2;
 
 	gettimeofday(&tv, NULL);
 	start = tv.tv_sec * 1000 + tv.tv_usec / 1000;
@@ -902,8 +1023,8 @@ int graphicsMain( void* ptrData )
 		g = rand() % 256;
 		b = rand() % 256;
 
-		x = rand() % (width - w);
-		y = rand() % (height - h);
+		x = rand() % (nWidth - w);
+		y = rand() % (nHeight - h);
 
 		data = buffer + (y + posy) * (nPitch) + (x + posx) * (bytes_per_pixel);
 
@@ -913,20 +1034,20 @@ int graphicsMain( void* ptrData )
 
 		for (i = 0; i < h; i++) 
 		{
-			pline = data;
+			pDstLine = data;
 			for (j = 0; j < w; j++) 
 			{
-				*pline = (unsigned char)r;
-				pline++;
+				*pDstLine = (unsigned char)r;
+				pDstLine++;
 
-				*pline = (unsigned char)g;
-				pline++;
+				*pDstLine = (unsigned char)g;
+				pDstLine++;
 
-				*pline = (unsigned char)b;
-				pline++;
+				*pDstLine = (unsigned char)b;
+				pDstLine++;
 
-				*pline = 255;//a;
-				pline++;
+				*pDstLine = 255;//a;
+				pDstLine++;
 			}
 
 			data += nPitch;
@@ -945,6 +1066,10 @@ int graphicsMain( void* ptrData )
 		sleep(0.2);	
 
 	} while (end < (start + 50000));
+
+	*/
+
+	//
 
 	printf("graphicsMain Done !!!\r\n");	
 
