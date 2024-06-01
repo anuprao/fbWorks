@@ -59,8 +59,7 @@
 #define FB_WIDTH  720
 #define FB_HEIGHT 1280
 
-#define MAX_EVENTS 5
-#define READ_SIZE 10
+#define MAX_EVENTS 32
 
 #define FB_KEY_ESC	0x1B
 
@@ -73,10 +72,10 @@ int epoll_fd;
 int fdTimerScrRefresh;
 struct itimerspec ts;
 
-unsigned char inputKeys[16];
+unsigned char inputKeys[MAX_EVENTS];
 
 int fdMouseTouch;
-struct input_event  evInputEvents[16];
+struct input_event  evInputEvents[MAX_EVENTS];
 
 pthread_t thGraphics;
 
@@ -503,11 +502,13 @@ void checkIfQuit(void)
 	pthread_testcancel();
 }
 
+/*
 static void cleanupGraphicsThread(void *arg)
 {
 	printf("Cleanup !!!\n");
 	//
 }
+*/
 
 //
 
@@ -642,14 +643,11 @@ void initEvents(void)
 
 void eventLoop()
 {
+	int i;
 	int quit = 0;
 
 	int event_count;
 	struct epoll_event newEvents[MAX_EVENTS];
-	
-	int i;
-	size_t bytes_read;
-	char read_buffer[READ_SIZE + 1];
 
 	while(0 == quit)
 	{		
@@ -664,23 +662,22 @@ void eventLoop()
 			if(newEvents[i].events && EPOLLIN )
 			{
 				// Read FDs in Event list to reset them and prevent repeat triggering
-				//printf("Reading file descriptor '%d' -- ", newEvents[i].data.fd);
-				//bytes_read = read(newEvents[i].data.fd, read_buffer, READ_SIZE);
 				
 				if(STDIN_FILENO == newEvents[i].data.fd)
 				{
-					int i, n;
+					int j, n, nEvents;
 
 					n = read(STDIN_FILENO, inputKeys, sizeof(inputKeys));
 					if (n > 0) 
 					{
-						for (i = 0; i < n; i++) 
+						nEvents = n / sizeof(unsigned char);
+						for (j = 0; j < nEvents; j++) 
 						{
-							printf("inputKeys[%d] = 0x%02X !!!\n", i, inputKeys[i]);
+							printf("inputKeys[%d] = 0x%02X !!!\n", j, inputKeys[j]);
 
 							// Quit if 'q' or 'Q' is pressed
-							// if (inputKeys[i] == 'q' || inputKeys[i] == 'Q')
-							if (FB_KEY_ESC == inputKeys[i])
+							// if (inputKeys[j] == 'q' || inputKeys[j] == 'Q')
+							if (FB_KEY_ESC == inputKeys[j])
 							{
 								printf("Quit !!!\n");
 								msgGraphicsThreadToQuit();
@@ -692,28 +689,31 @@ void eventLoop()
 
 				if(fdMouseTouch == newEvents[i].data.fd)
 				{
-					int i, n;
+					int j, n, nEvents;
 					struct input_event* pSample;
 
 					n = read(fdMouseTouch, evInputEvents, sizeof(evInputEvents));
+					//printf("Sz input_event %ld\n", sizeof(struct input_event));
+					//printf("Sz evInputEvents %ld\n", sizeof(evInputEvents));
+					//printf("Received %d bytes\n", n);
+					printf("Received %ld input_event\n", n / sizeof(struct input_event));
 					if (n > 0) 
 					{
 						pSample = &evInputEvents[0];
-						for (i = 0; i < n; i++) 
+						nEvents = n / sizeof(struct input_event);
+						for (j = 0; j < nEvents; j++) 
 						{
-							//printf("keys[%d] = 0x%02X !!!\n", i, keys[i]);
-
 							// Mouse events
 
 							if ((EV_KEY == pSample->type) && (BTN_LEFT == pSample->code)) 
 							{
 								if (pSample->value > 0)
 								{
-									printf("Left mouse button pressed\n");
+									//printf("Left mouse button pressed\n");
 								}
 								else
 								{
-									printf("Left mouse button released\n");
+									//printf("Left mouse button released\n");
 								}
 							}
 
@@ -721,11 +721,11 @@ void eventLoop()
 							{
 								if (pSample->value > 0)
 								{
-									printf("Right mouse button pressed\n");
+									//printf("Right mouse button pressed\n");
 								}
 								else
 								{
-									printf("Right mouse button released\n");
+									//printf("Right mouse button released\n");
 								}
 							}
 
@@ -733,29 +733,29 @@ void eventLoop()
 
 							if ((EV_ABS == pSample->type) && (ABS_X == pSample->code)) 
 							{
-								printf("ABS_X : %d\n", pSample->value);
+								//printf("ABS_X : %d\n", pSample->value);
 							}
 
 							if ((EV_ABS == pSample->type) && (ABS_Y == pSample->code)) 
 							{
-								printf("ABS_Y : %d\n", pSample->value);
+								//printf("ABS_Y : %d\n", pSample->value);
 							}
 
 							// Multi-Touch screen events
 
 							if ((EV_ABS == pSample->type) && (ABS_MT_SLOT == pSample->code)) 
 							{
-								printf("ABS_MT_SLOT : %d\n", pSample->value);
+								//printf("ABS_MT_SLOT : %d\n", pSample->value);
 							}
 
 							if ((EV_ABS == pSample->type) && (ABS_MT_POSITION_X == pSample->code)) 
 							{
-								printf("ABS_MT_POSITION_X : %d\n", pSample->value);
+								//printf("ABS_MT_POSITION_X : %d\n", pSample->value);
 							}
 
 							if ((EV_ABS == pSample->type) && (ABS_MT_POSITION_Y == pSample->code)) 
 							{
-								printf("ABS_MT_POSITION_Y : %d\n", pSample->value);
+								//printf("ABS_MT_POSITION_Y : %d\n", pSample->value);
 							}
 
 							//
