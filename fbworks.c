@@ -12,6 +12,7 @@
 // FrameBuffer Build
 // 
 // export PATH=/mnt/workspace/sdks/armv7l-linux-musleabihf-cross/bin:$PATH 
+// export PATH=/run/media/anup/ext_sdks/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc:$PATH
 // 
 // armv7l-linux-musleabihf-gcc -o fbworks_fb -D BACKEND_FB fbworks.c
 // 
@@ -681,7 +682,7 @@ void eventLoop()
 		//printf("%d ready events\n", event_count);
 		for(i = 0; i < event_count; i++)
 		{
-			if(newEvents[i].events && EPOLLIN )
+			if(newEvents[i].events & EPOLLIN )
 			{
 				// Read FDs in Event list to reset them and prevent repeat triggering
 				
@@ -1071,7 +1072,10 @@ int graphicsMain( void* ptrData )
 		long size;
 		unsigned char* fontBuffer;	
 
-		const char* fnFont = "font/Cascadia.ttf";
+		const char* fnFont = "font/FiraCode-Regular.ttf";
+		//const char* fnFont = "font/FiraCode-Medium.ttf";
+		//const char* fnFont = "font/Hack-Regular.ttf";
+		//const char* fnFont = "font/Cascadia.ttf";
 		//const char* fnFont = "font/Monda-Regular.ttf";		
 		//const char* fnFont = "font/VictorMono-Regular.ttf";	
 
@@ -1093,8 +1097,8 @@ int graphicsMain( void* ptrData )
 		}
 
 		int b_w = 720; /* bitmap width */
-		int b_h = 128; /* bitmap height */
-		int l_h = 48; //24; /* line height */
+		int b_h = 22; /* bitmap height */
+		int l_h = 20; //24; /* line height */
 
 		/* create a bitmap for the phrase */
 		unsigned char* bitmap = calloc(b_w * b_h, sizeof(unsigned char));
@@ -1103,7 +1107,7 @@ int graphicsMain( void* ptrData )
 		float scale = stbtt_ScaleForPixelHeight(&info, l_h);
 
 		//char* word = "Now that is what I call ... Cheese !!!";
-		char* word = "Hello ... My friend !!!";
+		char* word = "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789";
 
 		int x = 0;
 			
@@ -1151,9 +1155,9 @@ int graphicsMain( void* ptrData )
 
 		//
 
-		unsigned char fr = 32;
-		unsigned char fg = 160;
-		unsigned char fb = 224;
+		unsigned char fr = 64;
+		unsigned char fg = 192;
+		unsigned char fb = 240;
 		unsigned char fc = 0;
 
 		int nReqChannels = 1;
