@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 #include <fcntl.h>
@@ -131,6 +132,8 @@ struct input_event  evInputEvents[MAX_EVENTS];
 pthread_t thGraphics;
 
 pthread_mutex_t lockBackBuffer;
+
+bool bUpdate = false;
 
 //
 
@@ -256,7 +259,9 @@ void initGraphics(stBufferAttr* ptrBufferAttr)
 	}
 
 	//
+
 	printf("%dx%d, %d bpp\n", width, height, 8*frontSurface->format->BytesPerPixel);
+
 	//printf("rotate=%d\n", vinfo.rotate);
 	//printf("activate=%d\n", vinfo.activate);
 	printf("line_length=%d\n", frontSurface->pitch);
@@ -883,14 +888,20 @@ void eventLoop()
 
 					//printf( "RefreshEvent ...\n");
 
-					//
-					lockSurface();
-					//
+					if(true == bUpdate)
+					{
+						//
+						lockSurface();
+						//
 
-					blitBackBufferToFrontBuffer();
+						blitBackBufferToFrontBuffer();
 
-					//
-					unlockSurface();
+						//
+						unlockSurface();
+
+						//
+						bUpdate = false;
+					}
 					//                    
 				}
 
@@ -1326,7 +1337,11 @@ int graphicsMain( void* ptrData )
 		//
 
 		free(fontBuffer);
-    	free(bitmap);		
+    	free(bitmap);	
+
+		//
+
+		bUpdate = true;	
 	}
 
 	//
