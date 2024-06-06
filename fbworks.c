@@ -1215,7 +1215,7 @@ int graphicsMain( void* ptrData )
 		//
 
 		free(fontBuffer);
-    		free(bitmap);	
+		free(bitmap);	
 
 		//
 
