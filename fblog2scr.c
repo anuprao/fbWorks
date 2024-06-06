@@ -1109,7 +1109,7 @@ int graphicsMain( void* ptrData )
 	{
 		int x,y,n;
 
-		const char* fnImage = "img/myanimal.png";
+		const char* fnImage = "img/console_bkg.jpg";
 		unsigned char *im_data;
 
 		unsigned char *resized_data;
@@ -1232,9 +1232,9 @@ int graphicsMain( void* ptrData )
 			printf("failed\n");
 		}
 
-		int b_w = 720; /* bitmap width */
-		int b_h = 22; /* bitmap height */
-		int l_h = 20; //24; /* line height */
+		int b_w = 692; /* bitmap width */
+		int b_h = 24; /* bitmap height */
+		int l_h = 22; //24; /* line height */
 
 		/* create a bitmap for the phrase */
 		unsigned char* bitmap = calloc(b_w * b_h, sizeof(unsigned char));
@@ -1243,7 +1243,7 @@ int graphicsMain( void* ptrData )
 		float scale = stbtt_ScaleForPixelHeight(&info, l_h);
 
 		//char* word = "Now that is what I call ... Cheese !!!";
-		char* word = "abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789";
+		char* word = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 		int x = 0;
 			
@@ -1292,28 +1292,71 @@ int graphicsMain( void* ptrData )
 
 		//
 
-		unsigned char fr = 64;
-		unsigned char fg = 192;
-		unsigned char fb = 240;
+		unsigned char fr = 160;
+		unsigned char fg = 224;
+		unsigned char fb = 255;
+		
 		unsigned char fc = 0;
-
+		
+		unsigned char ir = 128;
+		unsigned char ig = 128;
+		unsigned char ib = 128;
+		
 		int nReqChannels = 1;
 		int line_len = (size_t) (x * nReqChannels);
 		//printf("line_len = %d\n", line_len);
 		pDstLine = pBackBuffer;
 		pSrcLine = bitmap;
 		pSrcData = pSrcLine;
+		
+		pDstLine = pDstLine + 14*nPitch;
 
 		for (int m =0; m < b_h; m++) 
 		{
 			//(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
 
-			pDstData = pDstLine;
-			
+			pDstData = pDstLine + 14*4;
 
 			for (int n =0; n < b_w; n++) 
 			{
 				fc = *pSrcData;
+
+				//
+
+				ir = (unsigned char) *pDstData;
+				*pDstData = (unsigned char) (fr*fc + ir*(255-fc)>>8);
+				pDstData++;
+				
+				ig = (unsigned char) *pDstData;
+				*pDstData = (unsigned char) (fg*fc + ig*(255-fc)>>8);
+				pDstData++;
+				
+				ib = (unsigned char) *pDstData;
+				*pDstData = (unsigned char) (fb*fc + ib*(255-fc)>>8);
+				pDstData++;
+				
+				*pDstData = 255;//a;
+				pDstData++;
+								
+				//
+
+				/*
+				*pDstData = (unsigned char) ((fr*(255-k) + fc*k)>>8);
+				pDstData++;
+
+				*pDstData = (unsigned char) ((fg*(255-k) + fc*k)>>8);
+				pDstData++;
+
+				*pDstData = (unsigned char) ((fb*(255-k) + fc*k)>>8);
+				pDstData++;
+				
+				*pDstData = 255;//a;
+				pDstData++;
+				*/
+								
+				//
+				
+				/*
 
 				*pDstData = (unsigned char) ((fr * fc)>>8);
 				pDstData++;
@@ -1323,9 +1366,13 @@ int graphicsMain( void* ptrData )
 
 				*pDstData = (unsigned char) ((fb * fc)>>8);
 				pDstData++;
-
+				
 				*pDstData = 255;//a;
 				pDstData++;
+								
+				*/
+				
+				//
 
 				pSrcData++;
 			}
