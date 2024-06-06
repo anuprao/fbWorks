@@ -1,11 +1,11 @@
-// fbWorks - Boilerplate code to get framebuffer graphics with working keyboard and mouse/touch
+// fblog2scr - Boilerplate code to get framebuffer graphics with working keyboard and mouse/touch
 // Author: Anup Jayapal Rao, 2024
 
 // License: Apache License
 
 // SDL based Emulation Build
 // 
-// gcc -o fbworks_SDL -D BACKEND_SDL -D SCALED_OUTPUT fbworks.c -I /usr/include/SDL2 -l SDL2 -l m
+// gcc -o fblog2scr_SDL -D BACKEND_SDL -D SCALED_OUTPUT fblog2scr.c -I /usr/include/SDL2 -l SDL2 -l m
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -14,7 +14,7 @@
 // export PATH=/mnt/workspace/sdks/armv7l-linux-musleabihf-cross/bin:$PATH 
 // export PATH=/run/media/anup/ext_sdks/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc:$PATH
 // 
-// armv7l-linux-musleabihf-gcc -o fbworks_fb -D BACKEND_FB fbworks.c
+// armv7l-linux-musleabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c
 // 
 // Output binary size if 18KB
 // requires replacing the ld-musl-armhf.so.1 in the /lib (in rfs,or,initrd)
@@ -26,7 +26,7 @@
 
 // export PATH=$PATH:/mnt/workspace/sdks/linaro_7_hf/toolchain/bin
 //
-// arm-linux-gnueabihf-gcc -o fbworks_fb -D BACKEND_FB fbworks.c --static -lpthread
+// arm-linux-gnueabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c --static -lpthread
 //
 // Output binary size if 4.6 MB
 
@@ -86,6 +86,34 @@ struct rgba {
 
 #define FB_KEY_ESC	0x1B
 
+#define READ_SIZE			160
+
+//
+
+#ifdef BACKEND_SDL
+
+	#define FN_INPUT_FIFO		"INITWRAPPER_INPUT"
+	#define FN_INPUT_READ		FN_INPUT_FIFO
+	#define FN_INPUT_WRITE		FN_INPUT_FIFO
+
+	#define FN_OUTPUT_FIFO		"INITWRAPPER_OUTPUT"
+	#define FN_OUTPUT_READ		FN_OUTPUT_FIFO
+	#define FN_OUTPUT_WRITE		FN_OUTPUT_FIFO
+
+#endif // BACKEND_SDL
+
+#ifdef BACKEND_FB
+
+	#define FN_INPUT_FIFO		"/INITWRAPPER_INPUT"
+	#define FN_INPUT_READ		FN_INPUT_FIFO
+	#define FN_INPUT_WRITE		FN_INPUT_FIFO
+
+	#define FN_OUTPUT_FIFO		"/INITWRAPPER_OUTPUT"
+	#define FN_OUTPUT_READ		FN_OUTPUT_FIFO
+	#define FN_OUTPUT_WRITE		FN_OUTPUT_FIFO
+
+#endif // BACKEND_FB
+
 //
 
 struct termios prev_tty_cfg;
@@ -115,6 +143,11 @@ typedef struct stBufferAttr {
 } stBufferAttr;
 
 int graphicsMain( void* ptrData );
+
+//
+
+int fd_input_read = -1;
+int fd_output_write = -1;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -201,7 +234,7 @@ void initGraphics(stBufferAttr* ptrBufferAttr)
 	int bits_per_pixel = 32; // 0 means use the current bpp
 	Uint32 flags = 0; //SDL_RESIZABLE; // make a resizable window
 
-	frontWindow = SDL_CreateWindow("fbWorks", -1, -1, width, height, flags);
+	frontWindow = SDL_CreateWindow("fblog2scr", -1, -1, width, height, flags);
 	if(NULL == frontWindow) 
 	{
 		fprintf(stderr, "Unable to obtain frontWindow: %s\n", SDL_GetError());
@@ -639,6 +672,46 @@ void addMouseEvents(void)
 	}
 }
 
+void addRedirEvents(void)
+{
+	//
+
+	fd_input_read = open(FN_INPUT_READ, O_RDONLY | O_NONBLOCK);
+	if(0 < fd_input_read)
+	{
+		printf("Opened  fd_input_read = %d\n", fd_input_read);
+	}
+	else
+	{
+		perror("Could not open fd_input_read");
+	}
+
+	// USe RDWR since, as WRONLY can only be used if the pipe is known to be aleady opened for reading
+	fd_output_write = open(FN_OUTPUT_WRITE, O_RDWR | O_NONBLOCK);
+	if(0 < fd_output_write)
+	{			
+		printf("Opened  fd_output_write = %d\n", fd_output_write);
+	}
+	else
+	{
+		perror("Could not open fd_output_write");
+	}	
+
+	//
+	{
+		struct epoll_event epollEvent_KB;
+
+		epollEvent_KB.events = EPOLLIN;
+		epollEvent_KB.data.fd = fd_input_read;
+		if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd_input_read, &epollEvent_KB) == -1)
+		{
+			printf("epoll_ctl(ADD) failed: errno=%d\n", errno);
+			close(epoll_fd);
+			exit(10);
+		}				
+	}
+}
+
 void initEvents(void)
 {
 	if (pthread_mutex_init(&lockBackBuffer, NULL) != 0) 
@@ -654,12 +727,16 @@ void initEvents(void)
 		exit(5);
 	}
 
+	//
+
 	// Init Timer
 	addScreenRefreshTimer();
 	
 	addKeyBoardEvents();
 
 	addMouseEvents();
+
+	addRedirEvents();
 }
 
 //
@@ -672,9 +749,12 @@ void eventLoop()
 	int event_count;
 	struct epoll_event newEvents[MAX_EVENTS];
 
+	unsigned char strRecd[128];
+
 	while(0 == quit)
 	{		
 		//printf("In poll_wait ... \n");
+
 		// Running epoll_wait with empty list works like a simple delay
 		memset(&newEvents, 0, sizeof(newEvents));
 		event_count = epoll_wait(epoll_fd, newEvents, MAX_EVENTS, -1);
@@ -813,6 +893,42 @@ void eventLoop()
 					unlockSurface();
 					//                    
 				}
+
+				if(fd_input_read == newEvents[i].data.fd)
+				{
+					if(newEvents[i].events & EPOLLIN )
+					{
+						// Read FDs in Event list to reset them and prevent repeat triggering
+						if(fd_input_read == newEvents[i].data.fd)
+						{
+							int n;
+
+							do
+							{
+								memset(strRecd,0,sizeof(strRecd));
+								n = read(fd_input_read, strRecd, sizeof(strRecd));
+								if (n > 0) 
+								{
+									//printf("Recd [%d]: %s\n", n, strRecd);
+									printf("%s", strRecd);
+									//puts(strRecd);
+
+									//
+
+									// Add a line of text to the screen
+									// ??
+								}
+							} while (n > 0);
+						}
+					}
+
+					//printf("EPOLLHUP | EPOLLOUT | EPOLLPRI : %d\n", EPOLLHUP | EPOLLOUT | EPOLLPRI);
+					//if(newEvents[i].events & (EPOLLHUP | EPOLLOUT | EPOLLPRI))
+					if(newEvents[i].events & (EPOLLHUP | EPOLLPRI))
+					{
+						quit = 1;
+					}
+				}
 			}
 		}
 
@@ -829,6 +945,15 @@ void eventLoop()
 
 void deInitEvents()
 {
+	//
+
+	// send EOF so child can continue (child blocks until all input has been processed):
+	close(fd_input_read);
+
+	close(fd_output_write);
+
+	//
+
 	if(-1 == close(fdTimerScrRefresh)) 
 	{
 		fprintf(stderr, "Failed to close timerfd: errno=%d\n", errno);
@@ -1122,7 +1247,8 @@ int graphicsMain( void* ptrData )
 		{
 			/* how wide is this character */
 			int ax;
-		int lsb;
+			int lsb;
+
 			stbtt_GetCodepointHMetrics(&info, word[i], &ax, &lsb);
 			/* (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) */
 
