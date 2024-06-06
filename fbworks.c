@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 #include <fcntl.h>
@@ -103,6 +104,8 @@ struct input_event  evInputEvents[MAX_EVENTS];
 pthread_t thGraphics;
 
 pthread_mutex_t lockBackBuffer;
+
+bool bUpdate = false;
 
 //
 
@@ -223,7 +226,9 @@ void initGraphics(stBufferAttr* ptrBufferAttr)
 	}
 
 	//
+
 	printf("%dx%d, %d bpp\n", width, height, 8*frontSurface->format->BytesPerPixel);
+
 	//printf("rotate=%d\n", vinfo.rotate);
 	//printf("activate=%d\n", vinfo.activate);
 	printf("line_length=%d\n", frontSurface->pitch);
@@ -654,6 +659,8 @@ void initEvents(void)
 		exit(5);
 	}
 
+	//
+
 	// Init Timer
 	addScreenRefreshTimer();
 	
@@ -675,6 +682,7 @@ void eventLoop()
 	while(0 == quit)
 	{		
 		//printf("In poll_wait ... \n");
+
 		// Running epoll_wait with empty list works like a simple delay
 		memset(&newEvents, 0, sizeof(newEvents));
 		event_count = epoll_wait(epoll_fd, newEvents, MAX_EVENTS, -1);
@@ -803,14 +811,20 @@ void eventLoop()
 
 					//printf( "RefreshEvent ...\n");
 
-					//
-					lockSurface();
-					//
+					if(true == bUpdate)
+					{
+						//
+						lockSurface();
+						//
 
-					blitBackBufferToFrontBuffer();
+						blitBackBufferToFrontBuffer();
 
-					//
-					unlockSurface();
+						//
+						unlockSurface();
+
+						//
+						bUpdate = false;
+					}
 					//                    
 				}
 			}
@@ -1122,7 +1136,8 @@ int graphicsMain( void* ptrData )
 		{
 			/* how wide is this character */
 			int ax;
-		int lsb;
+			int lsb;
+
 			stbtt_GetCodepointHMetrics(&info, word[i], &ax, &lsb);
 			/* (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) */
 
@@ -1200,7 +1215,11 @@ int graphicsMain( void* ptrData )
 		//
 
 		free(fontBuffer);
-    	free(bitmap);		
+    		free(bitmap);	
+
+		//
+
+		bUpdate = true;	
 	}
 
 	//
