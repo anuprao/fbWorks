@@ -30,16 +30,16 @@
 //
 // Output binary size if 4.6 MB
 
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
 
-#include <fcntl.h>
 #include <linux/input.h>
 
 #include <sys/mman.h>
@@ -151,6 +151,9 @@ int graphicsMain( void* ptrData );
 
 int fd_input_read = -1;
 int fd_output_write = -1;
+
+char arrTextBuffer[100][100];
+int nTextLines = -1;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -742,6 +745,11 @@ void initEvents(void)
 	addMouseEvents();
 
 	addRedirEvents();
+
+	//
+
+	memset(&arrTextBuffer[0][0], 0x0, sizeof(arrTextBuffer));
+	nTextLines = 0;
 }
 
 //
@@ -754,7 +762,7 @@ void eventLoop()
 	int event_count;
 	struct epoll_event newEvents[MAX_EVENTS];
 
-	unsigned char strRecd[128];
+	unsigned char strRecd[100];
 
 	while(0 == quit)
 	{		
@@ -921,13 +929,22 @@ void eventLoop()
 								if (n > 0) 
 								{
 									//printf("Recd [%d]: %s\n", n, strRecd);
-									printf("%s", strRecd);
+									//printf("%s", strRecd);
 									//puts(strRecd);
 
 									//
 
 									// Add a line of text to the screen
-									// ??
+									{
+										memcpy(&arrTextBuffer[nTextLines][0], strRecd, sizeof(strRecd));
+										nTextLines++;
+
+										if(100 <= nTextLines) 
+										{
+											nTextLines = 0;
+										}
+									}
+									
 								}
 							} while (n > 0);
 						}
@@ -1074,7 +1091,10 @@ void renderText(unsigned char* bitmap, int b_w, stbtt_fontinfo* pInfo, float sca
 		
 		// render character (stride and offset is important here) 
 		byteOffset = x + roundf(lsb * scale) + (y * b_w);
-		stbtt_MakeCodepointBitmap(pInfo, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, pstrText[i]);
+		if(0 < isprint(pstrText[i]))
+		{
+			stbtt_MakeCodepointBitmap(pInfo, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, pstrText[i]);
+		}
 
 		// advance x 
 		x += roundf(ax * scale);
@@ -1198,9 +1218,30 @@ void blitblendTextBuffer(unsigned char* pBuffer, int nPitch, int b_x, int b_y, u
 		pDstLine += nPitch;
 		//pSrcLine += line_len;
 	}		
+}
 
-	
+//
 
+// msleep(): Sleep for the requested number of milliseconds.
+int msleep(long msec)
+{
+    struct timespec ts;
+    int res;
+
+    if (msec < 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    ts.tv_sec = msec / 1000;
+    ts.tv_nsec = (msec % 1000) * 1000000;
+
+    do {
+        res = nanosleep(&ts, &ts);
+    } while (res && errno == EINTR);
+
+    return res;
 }
 
 int graphicsMain( void* ptrData )
@@ -1360,6 +1401,9 @@ int graphicsMain( void* ptrData )
 		free_resized:
 			if (im_data != resized_data)
 				free(resized_data);
+
+			//
+			bUpdate = true;	
 		}
 	}
 
@@ -1374,7 +1418,7 @@ int graphicsMain( void* ptrData )
 		float scale;
 
 		int b_w = 692; /* bitmap width */
-		int b_h = 24; /* bitmap height */
+		int b_h = 17; /* bitmap height */
 
 		int l_h = 17;//15; //24; /* line height */		
 
@@ -1423,15 +1467,40 @@ int graphicsMain( void* ptrData )
 			int b_x = 16; 
 			int b_y = 14;
 
-			for(int f_y = b_y ; f_y < (1200); f_y = f_y + b_h)
+			int nCurrLine = 0;
+
+			//for(int f_y = b_y ; f_y < (1200); f_y = f_y + b_h)
+			int f_y = b_y;
+			//while(nCurrLine < 100)
+			while(f_y < (1200))
 			{
 
 				//char* word = "Now that is what I call ... Cheese !!!";
-				char* pstrText = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789012345678901234567890123";
+				//char* pstrText = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789012345678901234567890123";
 
-				renderText(bitmap, b_w, &info, scale, ascent, pstrText);
+				while(nCurrLine == nTextLines)
+				{
+					msleep(50);
+				}
 
-				blitblendTextBuffer(pBackBuffer, nPitch, b_x, f_y, bitmap, b_w, b_h);
+				for(; nCurrLine < nTextLines; )
+				{
+					char* pstrText = &arrTextBuffer[nCurrLine][0];
+
+					//
+					memset(bitmap, 0x0, b_w * b_h);
+					renderText(bitmap, b_w, &info, scale, ascent, pstrText);
+
+					blitblendTextBuffer(pBackBuffer, nPitch, b_x, f_y, bitmap, b_w, b_h);
+
+					//
+
+					nCurrLine++;
+
+					//
+
+					f_y = f_y + b_h;
+				}
 
 				//
 				bUpdate = true;	
