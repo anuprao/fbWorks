@@ -1044,6 +1044,165 @@ int main(int argc, char *argv[])
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+void renderText(unsigned char* bitmap, int b_w, stbtt_fontinfo* pInfo, float scale, int ascent, char* pstrText)
+{
+	//
+
+	int x;
+	int y;
+	int i;
+	int ax;
+	int lsb;
+	int c_x1, c_y1, c_x2, c_y2;
+	int kern;
+	int byteOffset;
+	int len;
+
+	len = strlen(pstrText);
+
+	x = 0;
+	for (i = 0; i < len; ++i)
+	{
+		stbtt_GetCodepointHMetrics(pInfo, pstrText[i], &ax, &lsb);
+
+		// (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) 
+		// get bounding box for character (may be offset to account for chars that dip above or below the line) 
+		stbtt_GetCodepointBitmapBox(pInfo, pstrText[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
+		
+		// compute y (different characters have different heights) 
+		y = ascent + c_y1;
+		
+		// render character (stride and offset is important here) 
+		byteOffset = x + roundf(lsb * scale) + (y * b_w);
+		stbtt_MakeCodepointBitmap(pInfo, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, pstrText[i]);
+
+		// advance x 
+		x += roundf(ax * scale);
+		
+		// add kerning
+		kern = stbtt_GetCodepointKernAdvance(pInfo, pstrText[i], pstrText[i + 1]);
+		x += roundf(kern * scale);
+	}
+
+	/*
+		Note that this example writes each character directly into the target image buffer.
+		The "right thing" to do for fonts that have overlapping characters is
+		MakeCodepointBitmap to a temporary buffer and then alpha blend that onto the target image.
+		See the stb_truetype.h header for more info.
+	*/
+
+}
+
+void blitblendTextBuffer(unsigned char* pBuffer, int nPitch, int b_x, int b_y, unsigned char* bitmap, int b_w, int b_h)
+{
+	unsigned char *pDstData;
+	unsigned char *pDstLine;
+	unsigned char *pSrcData;
+	unsigned char *pSrcLine;
+
+	//
+
+	unsigned char fr = 255;//160;
+	unsigned char fg = 255;//224;
+	unsigned char fb = 255;//255;
+	
+	unsigned char fc = 0;
+	
+	unsigned char ir = 128;
+	unsigned char ig = 128;
+	unsigned char ib = 128;
+	
+	int nReqChannels = 1;
+
+	int line_len = (size_t) (b_x * nReqChannels);
+	//printf("line_len = %d\n", line_len);
+
+	pDstLine = pBuffer;
+	pSrcLine = bitmap;
+	pSrcData = pSrcLine;
+	
+	pDstLine = pDstLine + b_y*nPitch;
+
+	for (int m =0; m < b_h; m++) 
+	{
+		//(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
+
+		pDstData = pDstLine + b_x*4;
+
+		for (int n =0; n < b_w; n++) 
+		{
+			fc = *pSrcData;
+
+			//
+
+			
+
+			ir = (unsigned char) *pDstData;
+			*pDstData = (unsigned char) (fr*fc + ir*(255-fc)>>8);
+			pDstData++;
+			
+			ig = (unsigned char) *pDstData;
+			*pDstData = (unsigned char) (fg*fc + ig*(255-fc)>>8);
+			pDstData++;
+			
+			ib = (unsigned char) *pDstData;
+			*pDstData = (unsigned char) (fb*fc + ib*(255-fc)>>8);
+			pDstData++;
+			
+			*pDstData = 255;//a;
+			pDstData++;
+
+			
+							
+			//
+
+			/*
+			*pDstData = (unsigned char) ((fr*(255-k) + fc*k)>>8);
+			pDstData++;
+
+			*pDstData = (unsigned char) ((fg*(255-k) + fc*k)>>8);
+			pDstData++;
+
+			*pDstData = (unsigned char) ((fb*(255-k) + fc*k)>>8);
+			pDstData++;
+			
+			*pDstData = 255;//a;
+			pDstData++;
+			*/
+
+
+							
+			//
+			
+			/*
+
+			*pDstData = (unsigned char) ((fr * fc)>>8);
+			pDstData++;
+
+			*pDstData = (unsigned char) ((fg * fc)>>8);
+			pDstData++;
+
+			*pDstData = (unsigned char) ((fb * fc)>>8);
+			pDstData++;
+			
+			*pDstData = 255;//a;
+			pDstData++;
+							
+			*/
+			
+			//
+
+			pSrcData++;
+		}
+
+		pDstLine += nPitch;
+		//pSrcLine += line_len;
+	}		
+
+	
+
+}
+
 int graphicsMain( void* ptrData )
 {
 	stBufferAttr* ptrBufferAttr;
@@ -1206,14 +1365,29 @@ int graphicsMain( void* ptrData )
 
 	{
 		long size;
+		
 		unsigned char* fontBuffer;	
+		stbtt_fontinfo info;
+		
+		// calculate font scaling 
+		int ascent, descent, lineGap;
+		float scale;
 
-		const char* fnFont = "font/FiraCode-Regular.ttf";
+		int b_w = 692; /* bitmap width */
+		int b_h = 24; /* bitmap height */
+
+		int l_h = 17;//15; //24; /* line height */		
+
+		//const char* fnFont = "font/FiraCode-Regular.ttf";
 		//const char* fnFont = "font/FiraCode-Medium.ttf";
 		//const char* fnFont = "font/Hack-Regular.ttf";
 		//const char* fnFont = "font/Cascadia.ttf";
 		//const char* fnFont = "font/Monda-Regular.ttf";		
-		//const char* fnFont = "font/VictorMono-Regular.ttf";	
+		//const char* fnFont = "font/VictorMono-Regular.ttf";
+		//const char* fnFont = "font/VictorMono-ExtraLight.ttf";
+		//const char* fnFont = "font/VictorMono-Light.ttf";
+		//const char* fnFont = "font/VictorMono-Medium.ttf";
+		const char* fnFont = "font/VictorMono-SemiBold.ttf";
 
 		FILE* fontFile = fopen(fnFont, "rb");	
 
@@ -1226,169 +1400,43 @@ int graphicsMain( void* ptrData )
 		fread(fontBuffer, size, 1, fontFile);
 		fclose(fontFile);		
 
-		stbtt_fontinfo info;
 		if (!stbtt_InitFont(&info, fontBuffer, 0))
 		{
 			printf("failed\n");
 		}
 
-		int b_w = 692; /* bitmap width */
-		int b_h = 24; /* bitmap height */
-		int l_h = 22; //24; /* line height */
-
-		/* create a bitmap for the phrase */
-		unsigned char* bitmap = calloc(b_w * b_h, sizeof(unsigned char));
-
-		/* calculate font scaling */
-		float scale = stbtt_ScaleForPixelHeight(&info, l_h);
-
-		//char* word = "Now that is what I call ... Cheese !!!";
-		char* word = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-		int x = 0;
-			
-		int ascent, descent, lineGap;
 		stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
-
+		scale = stbtt_ScaleForPixelHeight(&info, l_h);
 		ascent = roundf(ascent * scale);
 		descent = roundf(descent * scale);
 
-		int i;
-		for (i = 0; i < strlen(word); ++i)
-		{
-			/* how wide is this character */
-			int ax;
-			int lsb;
+		//
 
-			stbtt_GetCodepointHMetrics(&info, word[i], &ax, &lsb);
-			/* (Note that each Codepoint call has an alternative Glyph version which caches the work required to lookup the character word[i].) */
-
-			/* get bounding box for character (may be offset to account for chars that dip above or below the line) */
-			int c_x1, c_y1, c_x2, c_y2;
-			stbtt_GetCodepointBitmapBox(&info, word[i], scale, scale, &c_x1, &c_y1, &c_x2, &c_y2);
-			
-			/* compute y (different characters have different heights) */
-			int y = ascent + c_y1;
-			
-			/* render character (stride and offset is important here) */
-			int byteOffset = x + roundf(lsb * scale) + (y * b_w);
-			stbtt_MakeCodepointBitmap(&info, bitmap + byteOffset, c_x2 - c_x1, c_y2 - c_y1, b_w, scale, scale, word[i]);
-
-			/* advance x */
-			x += roundf(ax * scale);
-			
-			/* add kerning */
-			int kern;
-			kern = stbtt_GetCodepointKernAdvance(&info, word[i], word[i + 1]);
-			x += roundf(kern * scale);
-		}
-
-		/*
-			Note that this example writes each character directly into the target image buffer.
-			The "right thing" to do for fonts that have overlapping characters is
-			MakeCodepointBitmap to a temporary buffer and then alpha blend that onto the target image.
-			See the stb_truetype.h header for more info.
-		*/
+		// create a bitmap for the phrase 
+		unsigned char* bitmap = calloc(b_w * b_h, sizeof(unsigned char));
 
 		//
 
-		unsigned char fr = 160;
-		unsigned char fg = 224;
-		unsigned char fb = 255;
-		
-		unsigned char fc = 0;
-		
-		unsigned char ir = 128;
-		unsigned char ig = 128;
-		unsigned char ib = 128;
-		
-		int nReqChannels = 1;
-		int line_len = (size_t) (x * nReqChannels);
-		//printf("line_len = %d\n", line_len);
-		pDstLine = pBackBuffer;
-		pSrcLine = bitmap;
-		pSrcData = pSrcLine;
-		
-		pDstLine = pDstLine + 14*nPitch;
-
-		for (int m =0; m < b_h; m++) 
 		{
-			//(void) memcpy((void *) pDstLine, (void *) pSrcLine, line_len);
+			int b_x = 16; 
+			int b_y = 14;
 
-			pDstData = pDstLine + 14*4;
+			//char* word = "Now that is what I call ... Cheese !!!";
+			char* pstrText = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789012345678901234567890123";
 
-			for (int n =0; n < b_w; n++) 
-			{
-				fc = *pSrcData;
+			renderText(bitmap, b_w, &info, scale, ascent, pstrText);
 
-				//
+			blitblendTextBuffer(pBackBuffer, nPitch, b_x, b_y, bitmap, b_w, b_h);
 
-				ir = (unsigned char) *pDstData;
-				*pDstData = (unsigned char) (fr*fc + ir*(255-fc)>>8);
-				pDstData++;
-				
-				ig = (unsigned char) *pDstData;
-				*pDstData = (unsigned char) (fg*fc + ig*(255-fc)>>8);
-				pDstData++;
-				
-				ib = (unsigned char) *pDstData;
-				*pDstData = (unsigned char) (fb*fc + ib*(255-fc)>>8);
-				pDstData++;
-				
-				*pDstData = 255;//a;
-				pDstData++;
-								
-				//
+			//
+			bUpdate = true;	
 
-				/*
-				*pDstData = (unsigned char) ((fr*(255-k) + fc*k)>>8);
-				pDstData++;
-
-				*pDstData = (unsigned char) ((fg*(255-k) + fc*k)>>8);
-				pDstData++;
-
-				*pDstData = (unsigned char) ((fb*(255-k) + fc*k)>>8);
-				pDstData++;
-				
-				*pDstData = 255;//a;
-				pDstData++;
-				*/
-								
-				//
-				
-				/*
-
-				*pDstData = (unsigned char) ((fr * fc)>>8);
-				pDstData++;
-
-				*pDstData = (unsigned char) ((fg * fc)>>8);
-				pDstData++;
-
-				*pDstData = (unsigned char) ((fb * fc)>>8);
-				pDstData++;
-				
-				*pDstData = 255;//a;
-				pDstData++;
-								
-				*/
-				
-				//
-
-				pSrcData++;
-			}
-
-			pDstLine += nPitch;
-			//pSrcLine += line_len;
-		}		
+		}
 
 		//
 
 		free(fontBuffer);
 		free(bitmap);	
-
-		//
-
-		bUpdate = true;	
 	}
 
 	//
