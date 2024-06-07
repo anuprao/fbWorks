@@ -1,4 +1,8 @@
 // gcc -o fb_redirectio fb_redirectio.c
+//
+//
+// export PATH=/mnt/workspace/sdks/armv7l-linux-musleabihf-cross/bin:$PATH
+// armv7l-linux-musleabihf-gcc -o fb_redirectio fb_redirectio.c --static
 
 #include <stdio.h>     
 #include <stdlib.h>

@@ -15,6 +15,8 @@
 // export PATH=/run/media/anup/ext_sdks/armv7l-linux-musleabihf-cross/bin/armv7l-linux-musleabihf-gcc:$PATH
 // 
 // armv7l-linux-musleabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c
+// or,
+// armv7l-linux-musleabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c --static -lpthread -lm
 // 
 // Output binary size if 18KB
 // requires replacing the ld-musl-armhf.so.1 in the /lib (in rfs,or,initrd)
@@ -26,7 +28,7 @@
 
 // export PATH=$PATH:/mnt/workspace/sdks/linaro_7_hf/toolchain/bin
 //
-// arm-linux-gnueabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c --static -lpthread
+// arm-linux-gnueabihf-gcc -o fblog2scr_fb -D BACKEND_FB fblog2scr.c --static -lpthread -lm
 //
 // Output binary size if 4.6 MB
 
@@ -1154,9 +1156,7 @@ void blitblendTextBuffer(unsigned char* pBuffer, int nPitch, int b_x, int b_y, u
 			fc = *pSrcData;
 
 			//
-
 			
-
 			ir = (unsigned char) *pDstData;
 			*pDstData = (unsigned char) (fr*fc + ir*(255-fc)>>8);
 			pDstData++;
