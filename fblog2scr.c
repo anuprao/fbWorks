@@ -1102,9 +1102,9 @@ void blitblendTextBuffer(unsigned char* pBuffer, int nPitch, int b_x, int b_y, u
 
 	//
 
-	unsigned char fr = 255;//160;
-	unsigned char fg = 255;//224;
-	unsigned char fb = 255;//255;
+	unsigned char fr = 160;//160;
+	unsigned char fg = 224;//224;
+	unsigned char fb = 240;//255;
 	
 	unsigned char fc = 0;
 	
@@ -1418,18 +1418,25 @@ int graphicsMain( void* ptrData )
 		//
 
 		{
+			// 86 x 70 cells available
+
 			int b_x = 16; 
 			int b_y = 14;
 
-			//char* word = "Now that is what I call ... Cheese !!!";
-			char* pstrText = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789012345678901234567890123";
+			for(int f_y = b_y ; f_y < (1200); f_y = f_y + b_h)
+			{
 
-			renderText(bitmap, b_w, &info, scale, ascent, pstrText);
+				//char* word = "Now that is what I call ... Cheese !!!";
+				char* pstrText = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789012345678901234567890123";
 
-			blitblendTextBuffer(pBackBuffer, nPitch, b_x, b_y, bitmap, b_w, b_h);
+				renderText(bitmap, b_w, &info, scale, ascent, pstrText);
 
-			//
-			bUpdate = true;	
+				blitblendTextBuffer(pBackBuffer, nPitch, b_x, f_y, bitmap, b_w, b_h);
+
+				//
+				bUpdate = true;	
+			
+			}
 
 		}
 
