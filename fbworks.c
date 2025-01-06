@@ -101,7 +101,7 @@ unsigned char inputKeys[MAX_EVENTS];
 int fdMouseTouch;
 struct input_event  evInputEvents[MAX_EVENTS];
 
-pthread_t thGraphics;
+pthread_t thGraphics = 0L;
 
 pthread_mutex_t lockBackBuffer;
 
@@ -517,12 +517,18 @@ void launchGraphicsThread(stBufferAttr* ptrBufferAttr)
 
 void msgGraphicsThreadToQuit(void)
 {
-	pthread_cancel(thGraphics);
+	if(0L < thGraphics)
+	{
+		pthread_cancel(thGraphics);
+	}		
 }
 
 void waitForGraphicsThread(void)
 {
-	pthread_join(thGraphics, NULL);
+	if(0L < thGraphics)
+	{
+		pthread_join(thGraphics, NULL);
+	}
 }
 
 void checkIfQuit(void)
@@ -717,7 +723,7 @@ void eventLoop()
 						}
 					}
 				}
-
+				
 				if(fdMouseTouch == newEvents[i].data.fd)
 				{
 					int j, n, nEvents;
@@ -887,31 +893,31 @@ int main(int argc, char *argv[])
 
 	// Init Terminal Settings
 	initTerminal();
-
+	
 	// Init Graphics
 	initGraphics(&tBA);
 
 	// Blank the buffer contents before draw operations
 	blankFrontBuffer();
-
+	
 	// Init Events
 	initEvents();
-
+		
 	// Launch Thread
 	launchGraphicsThread(&tBA);
 
 	// Event Loop
 	eventLoop();
-
+	
 	// Wait for end of Graphics thread
-	waitForGraphicsThread();
-
+	waitForGraphicsThread();	
+	
 	// DeInit Events
 	deInitEvents();
 
 	// DeInit Graphics
 	deInitGraphics();	
-
+	
 	// Restore Terminal Settings
 	restoreTerminal();
 
@@ -1012,6 +1018,9 @@ int graphicsMain( void* ptrData )
 		{
 			if ((nWidth >= x) && (nHeight >= y))
 			{
+				//printf("nWidth = %d >= x= %d\n", nWidth, x);
+				//printf("nHeight = %d >= y= %d\n", nHeight, y);
+			
 				printf("Avoiding resize !\n");
 				resized_data = im_data;
 			}
@@ -1086,11 +1095,12 @@ int graphicsMain( void* ptrData )
 		long size;
 		unsigned char* fontBuffer;	
 
-		const char* fnFont = "font/FiraCode-Regular.ttf";
+		//const char* fnFont = "font/FiraCode-Regular.ttf";
 		//const char* fnFont = "font/FiraCode-Medium.ttf";
 		//const char* fnFont = "font/Hack-Regular.ttf";
 		//const char* fnFont = "font/Cascadia.ttf";
-		//const char* fnFont = "font/Monda-Regular.ttf";		
+		//const char* fnFont = "font/Monda-Regular.ttf";	
+		const char* fnFont = "font/VictorMono-SemiBold.ttf"; 	
 		//const char* fnFont = "font/VictorMono-Regular.ttf";	
 
 		FILE* fontFile = fopen(fnFont, "rb");	
